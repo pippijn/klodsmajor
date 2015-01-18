@@ -1,0 +1,87 @@
+[submodule "src/net/web/pippijn.github.io"]
+	path = src/net/web/pippijn.github.io
+	url = git@github.com:pippijn/pippijn.github.io
+[submodule "src/net/web/webgenerator_v2"]
+	path = src/net/web/webgenerator_v2
+	url = git@github.com:pippijn/webgenerator_v2
+[submodule "src/net/web/webgenerator"]
+	path = src/net/web/webgenerator
+	url = git@github.com:pippijn/webgenerator
+[submodule "src/net/web/xinutec.github.io"]
+	path = src/net/web/xinutec.github.io
+	url = git@github.com:xinutec/xinutec.github.io
+[submodule "src/net/pa_unpack"]
+	path = src/net/pa_unpack
+	url = git@github.com:pippijn/pa_unpack
+[submodule "src/net/lina-irc"]
+	path = src/net/lina-irc
+	url = git@github.com:pippijn/lina-irc
+[submodule "src/net/pa_json"]
+	path = src/net/pa_json
+	url = git@github.com:pippijn/pa_json
+[submodule "src/lang/yaccpp"]
+	path = src/lang/yaccpp
+	url = git@github.com:pippijn/yaccpp
+[submodule "src/lang/treematch"]
+	path = src/lang/treematch
+	url = git@github.com:pippijn/treematch
+[submodule "src/lang/re2ml"]
+	path = src/lang/re2ml
+	url = git@github.com:pippijn/re2ml
+[submodule "src/lang/merr"]
+	path = src/lang/merr
+	url = git@github.com:pippijn/merr
+[submodule "src/lang/jmlc"]
+	path = src/lang/jmlc
+	url = git@github.com:pippijn/jmlc
+[submodule "src/lang/hm-infer"]
+	path = src/lang/hm-infer
+	url = git@github.com:pippijn/hm-infer
+[submodule "src/lang/glr"]
+	path = src/lang/glr
+	url = git@github.com:pippijn/glr
+[submodule "src/lang/dreml"]
+	path = src/lang/dreml
+	url = git@github.com:pippijn/dreml
+[submodule "src/lang/cparser"]
+	path = src/lang/cparser
+	url = git@github.com:pippijn/cparser
+[submodule "src/lang/cparseparse"]
+	path = src/lang/cparseparse
+	url = git@github.com:pippijn/cparseparse
+[submodule "src/lang/aldor"]
+	path = src/lang/aldor
+	url = git@github.com:pippijn/obuild-aldor
+[submodule "src/games/mlspring"]
+	path = src/games/mlspring
+	url = git@github.com:pippijn/mlspring
+[submodule "src/games/deliantra"]
+	path = src/games/deliantra
+	url = git@github.com:pippijn/deliantra
+[submodule "src/edu/gvoc"]
+	path = src/edu/gvoc
+	url = git@github.com:pippijn/gvoc
+[submodule "src/devel/baselib"]
+	path = src/devel/baselib
+	url = git@github.com:pippijn/baselib
+[submodule "src/devel/codegen"]
+	path = src/devel/codegen
+	url = git@github.com:pippijn/codegen
+[submodule "src/devel/debuglib"]
+	path = src/devel/debuglib
+	url = git@github.com:pippijn/debuglib
+[submodule "src/devel/makequick"]
+	path = src/devel/makequick
+	url = git@github.com:pippijn/makequick
+[submodule "src/devel/mlsmoke"]
+	path = src/devel/mlsmoke
+	url = git@github.com:pippijn/mlsmoke
+[submodule "src/devel/perltypes"]
+	path = src/devel/perltypes
+	url = git@github.com:pippijn/perltypes
+[submodule "src/devel/ucslib"]
+	path = src/devel/ucslib
+	url = git@github.com:pippijn/ucslib
+[submodule "src/devel/mlwidgets"]
+	path = src/devel/mlwidgets
+	url = git@github.com:pippijn/mlwidgets
