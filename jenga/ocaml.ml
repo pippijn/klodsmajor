@@ -69,11 +69,13 @@ let compile ~dir ~compiler ~build ~dep_exts ~target_exts ~basename source_ext =
   ] in
 
   let deps =
-    if List.mem target_exts ".cmi" then
-      deps
-    else
-      Dep.path (Path.relative ~dir (basename ^ ".cmi"))
-      :: deps
+    (if List.mem target_exts ".cmi" then
+       []
+     else if List.mem target_exts ".cmo" then
+       [Dep.path (Path.relative ~dir (basename ^ ".cmi"))]
+     else
+       [Dep.path (Path.relative ~dir (basename ^ ".cmo"))]
+    ) @ deps
   in
 
   Rule.simple
@@ -82,11 +84,12 @@ let compile ~dir ~compiler ~build ~dep_exts ~target_exts ~basename source_ext =
         ~f:fun target_ext ->
           Path.relative ~dir (basename ^ target_ext)
     )
-    ~deps
+    ~deps:(Dep.path (Path.absolute
+                       "/srv/pippijn/code/git/github/tools/ocamlcomp") :: deps)
     ~action:(
       Action.process ~dir
-        ~prog:"ocamlfind"
-        ~args:([compiler; "-c"; source] @ flags)
+        ~prog:"/srv/pippijn/code/git/github/tools/ocamlcomp"
+        ~args:(["ocamlfind"; compiler; "-c"; source] @ flags)
     )
 
 
@@ -112,16 +115,14 @@ let ocaml_scheme ~dir ~build =
             | false ->
                 (* No mli => create cmi from ml. *)
                 Scheme.rules [
-                  (*ocamlc ~dep_exts:[] ~target_exts:[".cmi"; ".cmo"] ".ml";*)
-                  (*ocamlopt ~dep_exts:[".cmi"; ".cmo"] ~target_exts:[".cmx"; ".o"] ".ml";*)
-                  ocamlopt ~dep_exts:[] ~target_exts:[".cmi"; ".cmx"; ".o"] ".ml";
+                  ocamlc ~dep_exts:[] ~target_exts:[".cmi"; ".cmo"] ".ml";
+                  ocamlopt ~dep_exts:[".cmi"; ".cmo"] ~target_exts:[".cmx"; ".o"] ".ml";
                 ]
             | true ->
                 (* Has mli => create cmi from mli. *)
                 Scheme.rules [
-                  (*ocamlc ~dep_exts:[".cmi"] ~target_exts:[".cmo"] ".ml";*)
-                  (*ocamlopt ~dep_exts:[".cmi"; ".cmo"] ~target_exts:[".cmx"; ".o"] ".ml";*)
-                  ocamlopt ~dep_exts:[".cmi"] ~target_exts:[".cmx"; ".o"] ".ml";
+                  ocamlc ~dep_exts:[".cmi"] ~target_exts:[".cmo"] ".ml";
+                  ocamlopt ~dep_exts:[".cmi"; ".cmo"] ~target_exts:[".cmx"; ".o"] ".ml";
                   ocamlc ~dep_exts:[] ~target_exts:[".cmi"] ".mli";
                 ]
           )

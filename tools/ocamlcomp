@@ -1,0 +1,17 @@
+#!/usr/bin/env perl
+
+use common::sense;
+use File::Copy 'copy';
+use File::Path 'mkpath', 'rmtree';
+
+if ($ARGV[1] eq 'ocamlopt') {
+   my ($ml) = grep { /\.ml$/ } @ARGV;
+   $ml =~ s/\.ml$//;
+   mkpath "/tmp/ocamlcomp-$$" or die $!;
+   system @ARGV, "-o", "/tmp/ocamlcomp-$$/$ml.cmx";
+   copy "/tmp/ocamlcomp-$$/$ml.cmx", "$ml.cmx";
+   copy "/tmp/ocamlcomp-$$/$ml.o", "$ml.o";
+   rmtree "/tmp/ocamlcomp-$$";
+} else {
+   system @ARGV;
+}
