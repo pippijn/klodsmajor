@@ -113,23 +113,21 @@ let compile ~dir ~compiler ~build ~dep_exts ~target_exts ~basename source_ext =
     )
 
 
-type source_kind =
-  | Impl
-  | Intf
-
-
 type builder = {
-  (* Module file name without .ml *)
-  basename : string;
-  (* The file extensions this command will produce (.cmi, .cmo, etc.) *)
+  (* Compiler program used. *)
+  compiler : string;
+  (* Source extension (.ml/.mli) *)
+  source_ext : string;
+  (* The file extensions this command will produce (.cmi, .cmo, etc.). Primary
+     target extension first (e.g. .cmx for ocamlopt). *)
   target_exts : string list;
 }
 
 
-let do_build ~dir (builders : builder list) =
+let ocaml_rules ~dir ~basename (builders : builder list) =
   (* Determine the actual target extensions each builder should produce,
      ensuring each file is only built once. *)
-  let builders =
+  let builder_map =
     List.fold_left builders ~init:[]
       ~f:fun builder_map builder ->
         (* Actual extensions. *)
@@ -142,54 +140,27 @@ let do_build ~dir (builders : builder list) =
         (actual, builder) :: builder_map
   in
 
-  ignore builders
-
-
-let ocamlc ~basename ~source_kind =
-  let target_exts =
-    [".cmi"] @
-    match source_kind with
-    | Impl -> [".cmo"; ".cmt"; ".annot"]
-    | Intf -> [".cmti"]
-  in
-  {
-    basename;
-    target_exts;
-  }
-
-
-let ocamlopt ~basename ~source_kind =
-  let target_exts =
-    [".cmi"] @
-    match source_kind with
-    | Impl -> [".cmx"; ".cmt"; ".annot"; ".o"]
-    | Intf -> [".cmti"]
-  in
-  {
-    basename;
-    target_exts;
-  }
+  ignore dir;
+  ignore basename;
+  ignore builder_map;
+  print_endline "heyo";
+  Scheme.all []
 
 
 let ocaml_scheme ~dir ~build =
+  let _ = compile in
+  ignore build;
   Scheme.dep (
     Dep.glob_listing (Glob.create ~dir "*.ml") *>>| fun inputs ->
 
     Scheme.all (
       List.map inputs
         ~f:fun ml ->
+          (* File name without ".ml". *)
           let basename =
             let basename = Path.basename ml in
             String.slice basename 0 (String.length basename - 3)
           in
-
-          do_build ~dir [
-            ocamlc ~basename ~source_kind:Intf;
-            ocamlopt ~basename ~source_kind:Intf;
-          ];
-
-          let ocamlc   = compile ~dir ~build ~basename ~compiler:"ocamlc" in
-          let ocamlopt = compile ~dir ~build ~basename ~compiler:"ocamlopt" in
 
           Scheme.dep (
             let mli = Path.relative ~dir (basename ^ ".mli") in
@@ -197,16 +168,16 @@ let ocaml_scheme ~dir ~build =
             Dep.file_exists mli *>>| function
             | false ->
                 (* No mli => create cmi from ml. *)
-                Scheme.rules [
-                  ocamlc ~dep_exts:[] ~target_exts:[".annot"; ".cmt"; ".cmi"; ".cmo"] ".ml";
-                  ocamlopt ~dep_exts:[".cmi"; ".cmo"] ~target_exts:[".cmx"; ".o"] ".ml";
+                ocaml_rules ~dir ~basename [
+                  { compiler = "ocamlc";   source_ext = ".ml" ; target_exts = [".cmo"; ".cmi"; ".cmt"; ".annot"] };
+                  { compiler = "ocamlopt"; source_ext = ".ml" ; target_exts = [".cmx"; ".cmi"; ".cmt"; ".annot"; ".o"] };
                 ]
             | true ->
                 (* Has mli => create cmi from mli. *)
-                Scheme.rules [
-                  ocamlc ~dep_exts:[".cmi"] ~target_exts:[".annot"; ".cmt"; ".cmo"] ".ml";
-                  ocamlopt ~dep_exts:[".cmi"; ".cmo"] ~target_exts:[".cmx"; ".o"] ".ml";
-                  ocamlc ~dep_exts:[] ~target_exts:[".cmi"] ".mli";
+                ocaml_rules ~dir ~basename [
+                  { compiler = "ocamlc";   source_ext = ".ml" ; target_exts = [".cmo"; ".cmt"; ".annot"] };
+                  { compiler = "ocamlopt"; source_ext = ".ml" ; target_exts = [".cmx"; ".cmt"; ".annot"; ".o"] };
+                  { compiler = "ocamlc";   source_ext = ".mli"; target_exts = [".cmi"; ".cmti"] };
                 ]
           )
     )
@@ -224,18 +195,13 @@ let scheme ~dir =
           (fun contents ->
              let build =
                Sexplib.Sexp.of_string (String.strip contents)
-               |> Build.build_of_sexp
+               |> Build.t_of_sexp
              in
 
-             match
-               List.find build
-                 ~f:function
-                   | Build.Kind _ -> true
-                   | _ -> false
-             with
-             | None ->
+             match Build.ocaml_sources build with
+             | [] ->
                  Scheme.all []
-             | Some _ ->
+             | _ ->
                  ocaml_scheme ~dir ~build
           )
   )
