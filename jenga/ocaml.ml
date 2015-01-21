@@ -4,6 +4,8 @@ let return = Dep.return
 let ( *>>| ) = Dep.map
 let ( *>>= ) = Dep.bind
 
+open Bash
+
 
 let target_exists ~dir file =
   Dep.glob_listing (Glob.create ~dir file) *>>| function
@@ -68,6 +70,11 @@ let compile ~dir ~compiler ~build ~dep_exts ~target_exts ~basename source_ext =
     ocamldep ~dir ~flags ~dep_exts:(dep_exts @ target_exts) source;
   ] in
 
+  let flags =
+    flags
+    @ ["-annot"; "-bin-annot"]
+  in
+
   let deps =
     (if List.mem target_exts ".cmi" then
        []
@@ -84,13 +91,84 @@ let compile ~dir ~compiler ~build ~dep_exts ~target_exts ~basename source_ext =
         ~f:fun target_ext ->
           Path.relative ~dir (basename ^ target_ext)
     )
-    ~deps:(Dep.path (Path.absolute
-                       "/srv/pippijn/code/git/github/tools/ocamlcomp") :: deps)
+    ~deps
     ~action:(
-      Action.process ~dir
-        ~prog:"/srv/pippijn/code/git/github/tools/ocamlcomp"
-        ~args:(["ocamlfind"; compiler; "-c"; source] @ flags)
+      let tmp_name = basename ^ "." ^ compiler in
+      Bash.action ~dir (
+        [
+          bash1 "ocamlfind" ([
+              compiler; "-c"; source; "-o"; tmp_name ^ List.hd_exn target_exts
+            ] @ flags);
+        ] @ (
+          List.map target_exts
+            ~f:fun ext ->
+              bash1 "mv" [tmp_name ^ ext; basename ^ ext]
+        ) @ [
+          bash1 "rm" ["-f"; tmp_name ^ ".annot"];
+          bash1 "rm" ["-f"; tmp_name ^ ".cmi"];
+          bash1 "rm" ["-f"; tmp_name ^ ".cmt"];
+          (*bash1 "rm" ["-f"; tmp_name ^ ".cmti"];*)
+        ]
+      )
     )
+
+
+type source_kind =
+  | Impl
+  | Intf
+
+
+type builder = {
+  (* Module file name without .ml *)
+  basename : string;
+  (* The file extensions this command will produce (.cmi, .cmo, etc.) *)
+  target_exts : string list;
+}
+
+
+let do_build ~dir (builders : builder list) =
+  (* Determine the actual target extensions each builder should produce,
+     ensuring each file is only built once. *)
+  let builders =
+    List.fold_left builders ~init:[]
+      ~f:fun builder_map builder ->
+        (* Actual extensions. *)
+        let actual =
+          List.filter builder.target_exts
+            ~f:fun (ext : string) ->
+              List.exists builder_map
+                ~f:fun (exts, _) -> not (List.mem exts ext)
+        in
+        (actual, builder) :: builder_map
+  in
+
+  ignore builders
+
+
+let ocamlc ~basename ~source_kind =
+  let target_exts =
+    [".cmi"] @
+    match source_kind with
+    | Impl -> [".cmo"; ".cmt"; ".annot"]
+    | Intf -> [".cmti"]
+  in
+  {
+    basename;
+    target_exts;
+  }
+
+
+let ocamlopt ~basename ~source_kind =
+  let target_exts =
+    [".cmi"] @
+    match source_kind with
+    | Impl -> [".cmx"; ".cmt"; ".annot"; ".o"]
+    | Intf -> [".cmti"]
+  in
+  {
+    basename;
+    target_exts;
+  }
 
 
 let ocaml_scheme ~dir ~build =
@@ -105,6 +183,11 @@ let ocaml_scheme ~dir ~build =
             String.slice basename 0 (String.length basename - 3)
           in
 
+          do_build ~dir [
+            ocamlc ~basename ~source_kind:Intf;
+            ocamlopt ~basename ~source_kind:Intf;
+          ];
+
           let ocamlc   = compile ~dir ~build ~basename ~compiler:"ocamlc" in
           let ocamlopt = compile ~dir ~build ~basename ~compiler:"ocamlopt" in
 
@@ -115,13 +198,13 @@ let ocaml_scheme ~dir ~build =
             | false ->
                 (* No mli => create cmi from ml. *)
                 Scheme.rules [
-                  ocamlc ~dep_exts:[] ~target_exts:[".cmi"; ".cmo"] ".ml";
+                  ocamlc ~dep_exts:[] ~target_exts:[".annot"; ".cmt"; ".cmi"; ".cmo"] ".ml";
                   ocamlopt ~dep_exts:[".cmi"; ".cmo"] ~target_exts:[".cmx"; ".o"] ".ml";
                 ]
             | true ->
                 (* Has mli => create cmi from mli. *)
                 Scheme.rules [
-                  ocamlc ~dep_exts:[".cmi"] ~target_exts:[".cmo"] ".ml";
+                  ocamlc ~dep_exts:[".cmi"] ~target_exts:[".annot"; ".cmt"; ".cmo"] ".ml";
                   ocamlopt ~dep_exts:[".cmi"; ".cmo"] ~target_exts:[".cmx"; ".o"] ".ml";
                   ocamlc ~dep_exts:[] ~target_exts:[".cmi"] ".mli";
                 ]
