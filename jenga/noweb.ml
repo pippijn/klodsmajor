@@ -4,6 +4,7 @@ let ( *>>| ) = Dep.map
 
 
 let scheme ~dir =
+  Build.ignore_build @@
   Scheme.dep (
     Dep.glob_listing (Glob.create ~dir "*.nw") *>>| fun inputs ->
     let rules =

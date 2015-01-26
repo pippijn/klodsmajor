@@ -13,6 +13,16 @@ let _ = ( *>>= )
 let alias_default ~dir = Alias.create ~dir "DEFAULT"
 
 
+let recursive_default_scheme ~dir =
+  Scheme.rules [
+    Rule.default ~dir [
+      Dep.subdirs ~dir *>>= fun subs ->
+      Dep.all_unit (
+        List.map subs ~f:(fun sub -> Dep.alias (alias_default ~dir:sub)))
+    ]
+  ]
+
+
 let makefile_basename = "Makefile.jenga"
 
 
@@ -27,16 +37,6 @@ let default_all_buildable_and_extract ~dir =
       )
     ];
     Extract_makefile.extract ~from:(alias_default ~dir) ~makefile;
-  ]
-
-
-let recursive_default_scheme ~dir =
-  Scheme.rules [
-    Rule.default ~dir [
-      Dep.subdirs ~dir *>>= fun subs ->
-      Dep.all_unit (
-        List.map subs ~f:(fun sub -> Dep.alias (alias_default ~dir:sub)))
-    ]
   ]
 
 

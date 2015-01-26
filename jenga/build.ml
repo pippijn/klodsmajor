@@ -1,4 +1,6 @@
 open Core.Std
+open Jenga_lib.Api
+let ( *>>| ) = Dep.map
 
 
 type target_kind =
@@ -48,10 +50,18 @@ let empty = {
 }
 
 
-let t_of_sexp sx : t =
+let t_of_sexp sx =
   let info = build_info_list_of_sexp sx in
   List.fold_left info ~init:empty
     ~f:fun build -> function
+      | Name          name           -> { build with name           }
+      | Description   description    -> { build with description    }
+      | Kind          kind           -> { build with kind           }
+      | OCamlSources  ocaml_sources  -> { build with ocaml_sources  }
+      | OCamlRequires ocaml_requires -> { build with ocaml_requires }
+      | CSources      c_sources      -> { build with c_sources      }
+      | CHeaders      c_headers      -> { build with c_headers      }
+      | CRequires     c_requires     -> { build with c_requires     }
       | Flags flags ->
           { build with
             flags = List.fold_left flags ~init:build.flags
@@ -65,7 +75,11 @@ let t_of_sexp sx : t =
                   StringMap.add flags ~key:file ~data:flag_list
           }
 
-      | _ -> assert false
+
+let name           { name          ; _ } = name
+let kind           { kind          ; _ } = kind
+let ocaml_sources  { ocaml_sources ; _ } = ocaml_sources
+let ocaml_requires { ocaml_requires; _ } = ocaml_requires
 
 
 let flags_for { flags; _ } source =
@@ -73,5 +87,23 @@ let flags_for { flags; _ } source =
   |> Option.value ~default:[]
 
 
-let ocaml_requires { ocaml_requires; _ } = ocaml_requires
-let ocaml_sources { ocaml_sources; _ } = ocaml_sources
+
+let scheme ~dir scheme =
+  let build = Path.relative ~dir "Build.lsp" in
+  Scheme.dep (
+    Dep.file_exists build *>>| function
+    | false ->
+        Scheme.no_rules
+    | true ->
+        Scheme.contents build
+          (fun contents ->
+             Sexp.of_string (String.strip contents)
+             |> t_of_sexp
+             |> scheme)
+  )
+
+
+(* Ignore the build file. Necessary for all schemes that don't use the build
+   file, as otherwise they will create cyclic dependencies. *)
+let ignore_build =
+  Scheme.exclude (fun path -> Path.basename path = "Build.lsp")
