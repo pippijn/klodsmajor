@@ -2,11 +2,22 @@ open Core.Std
 open Jenga_lib.Api
 
 
+let needs_escape s =
+  let needs_escape = [' '; '\''; '"'; '\\'] in
+  String.exists s ~f:(List.mem needs_escape)
+
+
 let shell_escape s =
-  "'" ^ String.concat_map s ~f:(function
+  if not (needs_escape s) then
+    s
+  else
+    "'" ^
+    String.concat_map s ~f:(
+      function
       | '\'' -> "'\\''"
       | c -> String.make 1 c
-    ) ^ "'"
+    ) ^
+    "'"
 
 
 
