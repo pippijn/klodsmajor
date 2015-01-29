@@ -42,6 +42,7 @@ let default_all_buildable_and_extract ~dir =
 
 let scheme ~dir =
   Scheme.all [
+    Coq.scheme ~dir;
     Noweb.scheme ~dir;
     Ocaml.scheme ~dir;
     recursive_default_scheme ~dir;

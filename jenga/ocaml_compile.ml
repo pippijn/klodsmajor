@@ -23,16 +23,29 @@ let run_ocamldep ~dir ~flags source =
       ~args:(["ocamldep"; "-modules"; source] @ flags)
   )
 
-let ocamldep ~dir ~flags source =
+
+let ocamldep ~dir ~flags ~primary_ext source =
+  let dep_exts = List.dedup [primary_ext; ".cmi"] in
   run_ocamldep ~dir ~flags source *>>= fun deps ->
-  match String.split ~on:' ' (String.strip deps) with
-  | [] ->
+  match String.lsplit2 ~on:':' (String.strip deps) with
+  | None ->
       failwith "Invalid output from ocamldep"
-  | _ :: deps ->
-      Dep.all_unit @@ List.map deps
+  | Some (source', "") ->
+      assert (source' = source);
+      Dep.all_unit []
+  | Some (source', deps) ->
+      assert (source' = source);
+      Dep.all_unit @@ List.map (String.strip deps |> String.split ~on:' ')
         ~f:fun dep ->
+          assert (Char.is_uppercase dep.[0]);
           let cmi_uc = dep ^ ".cmi" in
           let cmi_lc = String.uncapitalize cmi_uc in
+
+          let make_dep basename =
+            Dep.all_unit @@
+            List.map dep_exts ~f:fun ext ->
+              Dep.path (Path.relative ~dir (basename ^ ext))
+          in
 
           Dep.both (target_exists ~dir cmi_uc) (target_exists ~dir cmi_lc) *>>= function
           | (true , true ) ->
@@ -42,11 +55,9 @@ let ocamldep ~dir ~flags source =
               )
           | (false, false) -> return () (* not found *)
           | (false, true ) ->
-              let lc = String.uncapitalize dep in
-              Dep.path (Path.relative ~dir (lc ^ ".cmi"))
+              make_dep (String.uncapitalize dep)
           | (true , false) ->
-              let lc = dep in
-              Dep.path (Path.relative ~dir (lc ^ ".cmi"))
+              make_dep dep
 
 
 type builder = {
@@ -60,6 +71,88 @@ type builder = {
 } with sexp
 
 type builder_map = (string list * builder) list with sexp
+
+
+let ocaml_rule ~dir ~build ~basename (target_exts, builder) =
+  (* $basename.ml *)
+  let source = basename ^ builder.source_ext in
+
+  let primary_ext =
+    match target_exts with
+    | [] ->
+        (* If this happens, that means everything built by this builder
+           is also built by other builders, so it has no effect. *)
+        failwith "Builder has no primary target extensions"
+    | x :: _ -> x
+  in
+
+  let flags =
+    (* Add -package flag with all ocamlfind requirements. *)
+    (match Build.ocaml_requires build with
+     | [] -> []
+     | requires -> ["-package"; String.concat ~sep:"," requires])
+    (* General flags for all OCaml builds. *)
+    (* Add user-specified file-specific flags. *)
+    @ Build.flags_for build source
+  in
+
+  let deps = [
+    (* The first dependency is our source file. *)
+    Dep.path (Path.relative ~dir source);
+    (* Run ocamldep to compute other dependencies. *)
+    ocamldep ~dir ~flags ~primary_ext source;
+  ] in
+
+  (* If this rule is not building the .cmi, it depends on some other rule to
+     build it. *)
+  let deps =
+    if List.mem target_exts ".cmi" then
+      deps
+    else
+      Dep.path (Path.relative ~dir (basename ^ ".cmi"))
+      :: deps
+  in
+
+  (* Add -{bin-,}annot flags after dependency discovery, as ocamldep
+     wouldn't like to see those. *)
+  let flags =
+    flags
+    @ ["-annot"; "-bin-annot";
+       "-safe-string";
+       "-principal";
+       "-strict-sequence";
+       "-thread"]
+  in
+
+  Rule.simple
+    ~targets:(
+      List.map target_exts
+        ~f:fun target_ext ->
+          Path.relative ~dir (basename ^ target_ext)
+    )
+    ~deps
+    ~action:(
+      let tmp_name = basename ^ "." ^ builder.compiler in
+      let open ShellUtil in
+      Bash.action ~dir (
+        [
+          bash1 "ocamlfind" (
+            [builder.compiler;
+             "-c"; source;
+             "-o"; tmp_name ^ primary_ext]
+            @ flags
+          );
+        ] @ (
+          List.map target_exts
+            ~f:fun ext ->
+              bash1 "mv" [tmp_name ^ ext; basename ^ ext]
+        ) @ (
+          List.map builder.target_exts
+            ~f:fun ext ->
+              bash1 "rm" ["-f"; tmp_name ^ ext]
+        )
+      )
+    )
 
 
 let ocaml_rules ~dir ~build ~basename (builders : builder list) =
@@ -80,75 +173,7 @@ let ocaml_rules ~dir ~build ~basename (builders : builder list) =
 
   let rules =
     List.map builder_map
-      ~f:fun (target_exts, builder) ->
-        (* $basename.ml *)
-        let source = basename ^ builder.source_ext in
-
-        let primary_ext =
-          match target_exts with
-          | [] ->
-              (* If this happens, that means everything built by this builder
-                 is also built by other builders, so it has no effect. *)
-              failwith "Builder has no primary target extensions"
-          | x :: _ -> x
-        in
-
-        let flags =
-          (* Add -package flag with all ocamlfind requirements. *)
-          (match Build.ocaml_requires build with
-           | [] -> []
-           | requires -> ["-package"; String.concat ~sep:"," requires])
-          (* General flags for all OCaml builds. *)
-          (* Add user-specified file-specific flags. *)
-          @ Build.flags_for build source
-        in
-
-        let deps = [
-          (* The first dependency is our source file. *)
-          Dep.path (Path.relative ~dir source);
-          (* Run ocamldep to compute other dependencies. *)
-          ocamldep ~dir ~flags source;
-        ] in
-
-        (* Add -{bin-,}annot flags after dependency discovery, as ocamldep
-           wouldn't like to see those. *)
-        let flags =
-          flags
-          @ ["-annot"; "-bin-annot";
-             "-safe-string";
-             "-principal";
-             "-strict-sequence"]
-        in
-
-        Rule.simple
-          ~targets:(
-            List.map target_exts
-              ~f:fun target_ext ->
-                Path.relative ~dir (basename ^ target_ext)
-          )
-          ~deps
-          ~action:(
-            let tmp_name = basename ^ "." ^ builder.compiler in
-            let open ShellUtil in
-            Bash.action ~dir (
-              [
-                bash1 "ocamlfind" (
-                  [builder.compiler;
-                   "-c"; source;
-                   "-o"; tmp_name ^ primary_ext]
-                  @ flags
-                );
-              ] @ (
-                List.map target_exts
-                  ~f:fun ext ->
-                    bash1 "mv" [tmp_name ^ ext; basename ^ ext]
-              ) @ (
-                List.map builder.target_exts
-                  ~f:fun ext ->
-                    bash1 "rm" ["-f"; tmp_name ^ ext]
-              )
-            )
-          )
+      ~f:(ocaml_rule ~dir ~build ~basename)
   in
 
   Scheme.rules rules
